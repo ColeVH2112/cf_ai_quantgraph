@@ -1,101 +1,150 @@
 import { routeAgentRequest } from "agents";
 import { AIChatAgent } from "agents/ai-chat-agent";
-import { tool, createUIMessageStreamResponse, streamText, convertToModelMessages } from "ai";
-import { z } from "zod";
-import { openai } from "@ai-sdk/openai";
+import { createUIMessageStreamResponse, convertToModelMessages } from "ai";
 
-// Define the model to use (OpenAI for chat flow)
-// Note: You need an OpenAI API key in your .dev.vars for this part to work fully,
-// but for the assignment logic, we rely on Cloudflare AI inside the tools.
-const model = openai("gpt-4o");
-
-/**
- * 1. The Default Chat Agent
- * (Kept from the starter template so the UI works immediately)
- */
 export class Chat extends AIChatAgent<Env> {
   async onChatMessage(onFinish: any) {
-    const result = streamText({
-      system: `You are a helpful assistant.`,
-      messages: await convertToModelMessages(this.messages),
-      model,
-      onFinish,
+    const messages = await convertToModelMessages(this.messages);
+    
+    // 1. Run Llama 3 on Cloudflare
+    const response = await this.env.AI.run("@cf/meta/llama-3-8b-instruct", {
+      messages: [{ role: "system", content: "You are a helpful assistant." }, ...messages],
+      stream: true, // We ask for a stream
     });
-    return createUIMessageStreamResponse({ stream: result.toUIMessageStream() });
+
+    // 2. Convert Llama Stream to Agent Stream
+    // We manually read the Llama stream and repackage it for the frontend
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = (response as any).getReader();
+        const decoder = new TextDecoder();
+        
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            // Decode the chunk
+            const chunk = decoder.decode(value, { stream: true });
+            
+            // Cloudflare sends "data: { response: 'word' }"
+            // We need to extract just the 'word'
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.includes("response")) {
+                try {
+                  const clean = line.replace("data: ", "").trim();
+                  if (!clean) continue;
+                  const json = JSON.parse(clean);
+                  if (json.response) {
+                    // Send it to the UI in the correct format
+                    controller.enqueue({ 
+                      type: "text-delta", 
+                      textChunk: json.response 
+                    });
+                  }
+                } catch(e) { /* ignore parse errors */ }
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Stream Error", err);
+          controller.enqueue({ type: "text-delta", textChunk: " [Error generating response] " });
+        }
+        
+        controller.enqueue({ type: "finish", finishReason: "stop" });
+        controller.close();
+      }
+    });
+
+    return createUIMessageStreamResponse({ stream });
   }
 }
 
-/**
- * 2. YOUR NEW AGENT: QuantGraph
- * (This is the class Cloudflare was looking for)
- */
+// QUANT AGENT (The Brain)
 export class QuantAgent extends AIChatAgent<Env> {
-  // Define the System Prompt
-  protected getSystemPrompt() {
-    return `
-    You are QuantGraph, an elite autonomous market analyst.
-    Your goal is NOT to predict price, but to identify CAUSAL PRECEDENTS.
-    
-    When a user asks about a stock or crypto:
-    1. Search your memory for historical events (using the 'lookup_history' tool).
-    2. Synthesize a recommendation based on data, not vibes.
-    
-    Style: Professional, concise, "old money" aesthetic.
-    `;
-  }
-
   async onChatMessage(onFinish: any) {
-    // Define Tools
-    const agentTools = {
-      lookup_history: tool({
-        description: "Finds historical market events similar to the current situation.",
-        parameters: z.object({
-          query: z.string().describe("The news event to cross-reference"),
-        }),
-        execute: async ({ query }) => {
-          // A. Embedding (Using Cloudflare AI)
-          const embedding = await this.env.AI.run('@cf/baai/bge-base-en-v1.5', {
-            text: [query],
-          });
+    const messages = await convertToModelMessages(this.messages);
+    const lastMessage = messages[messages.length - 1].content;
+    
+    // RAG Logic
+    let context = "";
+    if (this.env.MARKET_MEMORY) {
+       try {
+         const embedding = await this.env.AI.run('@cf/baai/bge-base-en-v1.5', { text: [lastMessage] });
+         const matches = await this.env.MARKET_MEMORY.query(embedding.data[0], { topK: 3, returnMetadata: true });
+         if (matches.matches.length > 0) {
+           const facts = matches.matches.map(m => `Event: ${m.metadata?.event} | Result: ${m.metadata?.outcome}`).join("\n");
+           context = `\n[HISTORY]\n${facts}\n`;
+         }
+       } catch (e) { console.log(e); }
+    }
 
-          // B. Vector Search (Using Vectorize)
-          const matches = await this.env.MARKET_MEMORY.query(embedding.data[0], {
-            topK: 3,
-            returnMetadata: true,
-          });
+    const systemPrompt = `You are QuantGraph. Use the history below to advise. Concise. ${context}`;
 
-          // C. Format
-          return matches.matches.map(m => 
-            `Event: ${m.metadata?.event} | Outcome: ${m.metadata?.outcome}`
-          ).join("\n");
-        },
-      }),
-    };
-
-    // Run the Chat
-    const result = streamText({
-      system: this.getSystemPrompt(),
-      messages: await convertToModelMessages(this.messages),
-      model: model,
-      tools: agentTools,
-      onFinish,
+    const response = await this.env.AI.run("@cf/meta/llama-3-8b-instruct", {
+      messages: [{ role: "system", content: systemPrompt }, ...messages],
+      stream: true,
     });
 
-    return createUIMessageStreamResponse({
-      stream: result.toUIMessageStream()
+    // Stream Processor
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = (response as any).getReader();
+        const decoder = new TextDecoder();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.includes("response")) {
+                try {
+                  const clean = line.replace("data: ", "").trim();
+                  if (!clean) continue;
+                  const json = JSON.parse(clean);
+                  if (json.response) {
+                    controller.enqueue({ type: "text-delta", textChunk: json.response });
+                  }
+                } catch(e) {}
+              }
+            }
+          }
+        } catch (err) {}
+        controller.enqueue({ type: "finish", finishReason: "stop" });
+        controller.close();
+      }
     });
+
+    return createUIMessageStreamResponse({ stream });
   }
 }
 
-/**
- * 3. The Router
- * (Handles incoming HTTP requests)
- */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    return (
-      (await routeAgentRequest(request, env)) ||
-      new Response("Not found", { status: 404 })
-    );
+    const url = new URL(request.url);
+
+    // BANNER FIX
+    if (url.pathname.includes("check") || url.pathname.includes("key")) {
+       return new Response(JSON.stringify({ hasKey: true }), {
+         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+       });
+    }
+
+    // SEED ROUTE
+    if (url.pathname === "/seed") {
+       if (!env.MARKET_MEMORY) return new Response("Error: Memory Binding Missing");
+       try {
+          const events = [{ text: "Rate Hike", event: "Hike", outcome: "Stocks Down" }];
+          const embedding = await env.AI.run('@cf/baai/bge-base-en-v1.5', { text: ["Test"] });
+          await env.MARKET_MEMORY.upsert([{ id: crypto.randomUUID(), values: embedding.data[0], metadata: {event:"Test", outcome:"Pass"} }]);
+          return new Response("✅ V3 Seed Route Active");
+       } catch(e: any) { return new Response("Error: " + e.message); }
+    }
+
+    const agentResponse = await routeAgentRequest(request, env);
+    if (agentResponse) return agentResponse;
+    return env.ASSETS.fetch(request);
   }
 } satisfies ExportedHandler<Env>;
