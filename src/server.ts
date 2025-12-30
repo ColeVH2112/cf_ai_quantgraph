@@ -66,7 +66,7 @@ export default {
         Use the provided Historical Precedents to answer the user's question. 
         If no precedents are found, use your general knowledge but mention that specific database records were missing.
         
-        Style: Professional, concise, "Old Money" aesthetic.
+        Style: Professional, concise. You are technically advanced and looking to provide a concise explanation of the signals and how we should proceed given the information we have. Clearly express what we should see numericlly and how we should adjust as well as provide a concise and clear explanation for why and how
         ${context}`;
 
         // 3. RUN LLAMA 3
