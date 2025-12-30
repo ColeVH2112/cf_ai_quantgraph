@@ -1,90 +1,141 @@
-import { routeAgentRequest } from "agents";
 import { AIChatAgent } from "agents/ai-chat-agent";
 
-// Keep these for Worker initialization
-export class Chat extends AIChatAgent<Env> { async onChatMessage(onFinish: any) { return null; } }
-export class QuantAgent extends AIChatAgent<Env> { async onChatMessage(onFinish: any) { return null; } }
+export class Chat extends AIChatAgent<Env> {
+	async onChatMessage(_onFinish: any) {
+		return null;
+	}
+}
+
+export class QuantAgent extends AIChatAgent<Env> {
+	async onChatMessage(_onFinish: any) {
+		return null;
+	}
+}
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    const url = new URL(request.url);
+	async fetch(request: Request, env: Env, _ctx: ExecutionContext) {
+		const url = new URL(request.url);
 
-    // --- QUANTGRAPH API (Memory Enabled) ---
-    if (url.pathname === "/api/chat" && request.method === "POST") {
-      try {
-        const body = await request.json() as any;
-        const userPrompt = body.prompt;
-        
-        // 1. MEMORY LOOKUP (RAG)
-        let context = "";
-        if (env.MARKET_MEMORY) {
-          try {
-            // Create embedding for the user's question
-            const embedding = await env.AI.run('@cf/baai/bge-base-en-v1.5', { text: [userPrompt] });
-            
-            // Search the Vector Database
-            const matches = await env.MARKET_MEMORY.query(embedding.data[0], { topK: 3, returnMetadata: true });
-            
-            // Format found history
-            if (matches.matches.length > 0) {
-               const facts = matches.matches.map(m => ` • Event: ${m.metadata?.event} | Outcome: ${m.metadata?.outcome}`).join("\n");
-               context = `\n[HISTORICAL PRECEDENTS FOUND IN DATABASE]:\n${facts}\n`;
-            }
-          } catch (e) { console.log("Memory Lookup skipped: ", e); }
-        }
+		// --- QUANTGRAPH API (Memory Enabled) ---
+		if (url.pathname === "/api/chat" && request.method === "POST") {
+			try {
+				const body = (await request.json()) as any;
+				const userPrompt = body.prompt;
 
-        // 2. CONSTRUCT PROMPT
-        const systemPrompt = `You are QuantGraph, an elite financial historian and analyst. 
+				// 1. MEMORY LOOKUP (RAG)
+				let context = "";
+				if (env.MARKET_MEMORY) {
+					try {
+						const embedding = await env.AI.run("@cf/baai/bge-base-en-v1.5", {
+							text: [userPrompt],
+						});
+						const matches = await env.MARKET_MEMORY.query(embedding.data[0], {
+							topK: 3,
+							returnMetadata: true,
+						});
+
+						if (matches.matches.length > 0) {
+							const facts = matches.matches
+								.map(
+									(m) =>
+										` • Event: ${m.metadata?.event} | Outcome: ${m.metadata?.outcome}`,
+								)
+								.join("\n");
+							context = `\n[HISTORICAL PRECEDENTS FOUND IN DATABASE]:\n${facts}\n`;
+						}
+					} catch (e) {
+						console.log("Memory Lookup skipped: ", e);
+					}
+				}
+
+				// 2. CONSTRUCT PROMPT
+				const systemPrompt = `You are QuantGraph, an elite financial historian and analyst. 
         Your goal is to identify causal precedents for current market events.
         
         Use the provided Historical Precedents to answer the user's question. 
         If no precedents are found, use your general knowledge but mention that specific database records were missing.
         
-        Style: Professional, concise.You are extremely technically advanced and looking to give a concise explanation of teh signals as well as the moves that should be made based on those signals.
+        Style: Professional, concise, "Old Money" aesthetic.
         ${context}`;
 
-        // 3. RUN LLAMA 3
-        const response = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt }
-            ],
-            stream: false
-        });
+				// 3. RUN LLAMA 3
+				const response = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+					messages: [
+						{ role: "system", content: systemPrompt },
+						{ role: "user", content: userPrompt },
+					],
+					stream: false,
+				});
 
-        // 4. RETURN RESPONSE
-        return new Response(JSON.stringify(response), {
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
-        });
+				// 4. RETURN RESPONSE
+				return new Response(JSON.stringify(response), {
+					headers: {
+						"Content-Type": "application/json",
+						"Access-Control-Allow-Origin": "*",
+					},
+				});
+			} catch (err: unknown) {
+				const errorMsg = err instanceof Error ? err.message : String(err);
+				return new Response(
+					JSON.stringify({ response: `System Error: ${errorMsg}` }),
+					{
+						status: 500,
+						headers: { "Content-Type": "application/json" },
+					},
+				);
+			}
+		}
 
-      } catch (err: any) {
-        return new Response(JSON.stringify({ response: "System Error: " + err.message }), {
-          status: 500, headers: { "Content-Type": "application/json" }
-        });
-      }
-    }
+		// UTILITY ROUTES
+		if (url.pathname.includes("check") || url.pathname.includes("key")) {
+			return new Response(JSON.stringify({ hasKey: true }), {
+				headers: {
+					"Content-Type": "application/json",
+					"Access-Control-Allow-Origin": "*",
+				},
+			});
+		}
 
-    // UTILITY ROUTES
-    if (url.pathname.includes("check") || url.pathname.includes("key")) {
-       return new Response(JSON.stringify({ hasKey: true }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
-    }
+		if (url.pathname === "/seed") {
+			if (!env.MARKET_MEMORY)
+				return new Response("Error: Memory Binding Missing");
+			try {
+				const events = [
+					{
+						text: "Federal Reserve hikes rates 50bps",
+						event: "Rate Hike",
+						outcome: "Tech stocks dropped 3%, Banks rallied",
+					},
+					{
+						text: "SEC approves Bitcoin ETF",
+						event: "Regulatory Approval",
+						outcome: "Bitcoin surged 5% intraday",
+					},
+					{
+						text: "Oil supply shock in middle east",
+						event: "Geopolitical Conflict",
+						outcome: "Energy sector up 6%, Airlines down 4%",
+					},
+				];
+				for (const item of events) {
+					const embedding = await env.AI.run("@cf/baai/bge-base-en-v1.5", {
+						text: [item.text],
+					});
+					await env.MARKET_MEMORY.upsert([
+						{
+							id: crypto.randomUUID(),
+							values: embedding.data[0],
+							metadata: { event: item.event, outcome: item.outcome },
+						},
+					]);
+				}
+				return new Response("✅ QuantGraph Memory Seeded with 3 Events");
+			} catch (e: unknown) {
+				const msg = e instanceof Error ? e.message : String(e);
+				return new Response(`Error: ${msg}`);
+			}
+		}
 
-    if (url.pathname === "/seed") {
-       if (!env.MARKET_MEMORY) return new Response("Error: Memory Binding Missing");
-       try {
-          const events = [
-             { text: "Federal Reserve hikes rates 50bps", event: "Rate Hike", outcome: "Tech stocks dropped 3%, Banks rallied" },
-             { text: "SEC approves Bitcoin ETF", event: "Regulatory Approval", outcome: "Bitcoin surged 5% intraday" },
-             { text: "Oil supply shock in middle east", event: "Geopolitical Conflict", outcome: "Energy sector up 6%, Airlines down 4%" }
-          ];
-          for (const item of events) {
-             const embedding = await env.AI.run('@cf/baai/bge-base-en-v1.5', { text: [item.text] });
-             await env.MARKET_MEMORY.upsert([{ id: crypto.randomUUID(), values: embedding.data[0], metadata: {event: item.event, outcome: item.outcome} }]);
-          }
-          return new Response("✅ QuantGraph Memory Seeded with 3 Events");
-       } catch(e: any) { return new Response("Error: " + e.message); }
-    }
-
-    return env.ASSETS.fetch(request);
-  }
+		return env.ASSETS.fetch(request);
+	},
 } satisfies ExportedHandler<Env>;

@@ -1,32 +1,32 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cf-ai-quantgraph-v3",
-  "main": "src/server.ts",
-  "compatibility_date": "2024-11-06",
-  "compatibility_flags": ["nodejs_compat"],
-  "assets": {
-    "binding": "ASSETS",
-    "directory": "./dist/client"
-  },
-  "durable_objects": {
-    "bindings": [
-      { "name": "Chat", "class_name": "Chat" },
-      { "name": "QuantAgent", "class_name": "QuantAgent" }
-    ]
-  },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["Chat", "QuantAgent"]
-    }
-  ],
-  "ai": {
-    "binding": "AI"
-  },
-  "vectorize": [
-    {
-      "binding": "MARKET_MEMORY",
-      "index_name": "market-events"
-    }
-  ]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "cf-ai-quantgraph-v3",
+	"main": "src/server.ts",
+	"compatibility_date": "2024-11-06",
+	"compatibility_flags": ["nodejs_compat"],
+	"assets": {
+		"binding": "ASSETS",
+		"directory": "./dist/client"
+	},
+	"durable_objects": {
+		"bindings": [
+			{ "name": "Chat", "class_name": "Chat" },
+			{ "name": "QuantAgent", "class_name": "QuantAgent" }
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["Chat", "QuantAgent"]
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
+	"vectorize": [
+		{
+			"binding": "MARKET_MEMORY",
+			"index_name": "market-events"
+		}
+	]
 }
