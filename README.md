@@ -9,7 +9,7 @@
 Unlike generic chatbots, QuantGraph uses a vector database to ground its answers in historical data, adopting a professional "Quantitative Analyst" persona.
 
 ## 🚀 Live Demo
-**[Insert Your V3 Link Here]**
+**https://cf-ai-quantgraph-v3.colevanhersett.workers.dev/**
 
 ## 🏗️ Architecture
 This project is a **Full-Stack TypeScript** application deployed entirely on serverless infrastructure.
