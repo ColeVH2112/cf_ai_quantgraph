@@ -43,3 +43,29 @@ git clone [YOUR_REPO_URL]
 
 # 2. Install dependencies
 npm install
+```
+
+### Local Development 
+```bash
+npm run dev
+```
+
+### Deployment 
+This project uses a custom configuration to manage the full-stack build process
+```bash
+#1. Build the reac Frontend
+npx vite build
+#2. Deploy the Cloudflare Workers
+npx wrangler deploy --config wrangler.jsonc
+```
+
+### Memory Seeding 
+To initialize the Vector Database with historical data: 
+#1. Deploy the worker 
+#2. visit https://cf-ai-quantgraph-v3.colevanhersett.workers.dev/seed
+#3. The system will generate embedings for defined market events and store tehm in the Vectorize index 
+
+### Project Structure 
+* **src/server.ts**: The backend logic, RAG pipeline, and AI inference (worker).
+* **src/app.tsx**: The React frontend, chat interface, and API handling.
+* **wrangler.jsonc**: Cloudflare infrastructure configuration 
