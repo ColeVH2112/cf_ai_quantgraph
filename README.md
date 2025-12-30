@@ -39,7 +39,7 @@ This project is a **Full-Stack TypeScript** application deployed entirely on ser
 ### Installation
 ```bash
 # 1. Clone the repository
-git clone [YOUR_REPO_URL]
+git clone https://github.com/ColeVH2112/cf_ai_quantgraph.git
 
 # 2. Install dependencies
 npm install
