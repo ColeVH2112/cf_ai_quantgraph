@@ -1,60 +1,90 @@
 import { routeAgentRequest } from "agents";
 import { AIChatAgent } from "agents/ai-chat-agent";
 
-// These classes must exist for the Worker to start, even if unused.
-export class Chat extends AIChatAgent<Env> {
-  async onChatMessage(onFinish: any) { return null; }
-}
-export class QuantAgent extends AIChatAgent<Env> {
-  async onChatMessage(onFinish: any) { return null; }
-}
+// Keep these for Worker initialization
+export class Chat extends AIChatAgent<Env> { async onChatMessage(onFinish: any) { return null; } }
+export class QuantAgent extends AIChatAgent<Env> { async onChatMessage(onFinish: any) { return null; } }
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
 
-    // --- 1. SIMPLE API ENDPOINT (The Fix) ---
-    // We listen for "/api/chat". No Agent library involvement.
+    // --- QUANTGRAPH API (Memory Enabled) ---
     if (url.pathname === "/api/chat" && request.method === "POST") {
       try {
-        // Parse the incoming JSON from the frontend
         const body = await request.json() as any;
         const userPrompt = body.prompt;
+        
+        // 1. MEMORY LOOKUP (RAG)
+        let context = "";
+        if (env.MARKET_MEMORY) {
+          try {
+            // Create embedding for the user's question
+            const embedding = await env.AI.run('@cf/baai/bge-base-en-v1.5', { text: [userPrompt] });
+            
+            // Search the Vector Database
+            const matches = await env.MARKET_MEMORY.query(embedding.data[0], { topK: 3, returnMetadata: true });
+            
+            // Format found history
+            if (matches.matches.length > 0) {
+               const facts = matches.matches.map(m => ` • Event: ${m.metadata?.event} | Outcome: ${m.metadata?.outcome}`).join("\n");
+               context = `\n[HISTORICAL PRECEDENTS FOUND IN DATABASE]:\n${facts}\n`;
+            }
+          } catch (e) { console.log("Memory Lookup skipped: ", e); }
+        }
 
-        // Run Llama 3 (Simple Mode)
+        // 2. CONSTRUCT PROMPT
+        const systemPrompt = `You are QuantGraph, an elite financial historian and analyst. 
+        Your goal is to identify causal precedents for current market events.
+        
+        Use the provided Historical Precedents to answer the user's question. 
+        If no precedents are found, use your general knowledge but mention that specific database records were missing.
+        
+        Style: Professional, concise.You are extremely technically advanced and looking to give a concise explanation of teh signals as well as the moves that should be made based on those signals.
+        ${context}`;
+
+        // 3. RUN LLAMA 3
         const response = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
             messages: [
-              { role: "system", content: "You are QuantGraph. Concise and professional." },
+              { role: "system", content: systemPrompt },
               { role: "user", content: userPrompt }
             ],
             stream: false
         });
 
-        // Return the text in a simple JSON object
-        // Cloudflare AI returns: { response: "The text" }
+        // 4. RETURN RESPONSE
         return new Response(JSON.stringify(response), {
-          headers: { 
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*" // Allow browser access
-          }
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
         });
 
       } catch (err: any) {
-        return new Response(JSON.stringify({ response: "Error: " + err.message }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+        return new Response(JSON.stringify({ response: "System Error: " + err.message }), {
+          status: 500, headers: { "Content-Type": "application/json" }
         });
       }
     }
 
-    // Banner Fix
+    // UTILITY ROUTES
     if (url.pathname.includes("check") || url.pathname.includes("key")) {
-       return new Response(JSON.stringify({ hasKey: true }), {
-         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
-       });
+       return new Response(JSON.stringify({ hasKey: true }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
     }
 
-    // Fallback to assets
+    if (url.pathname === "/seed") {
+       if (!env.MARKET_MEMORY) return new Response("Error: Memory Binding Missing");
+       try {
+          const events = [
+             { text: "Federal Reserve hikes rates 50bps", event: "Rate Hike", outcome: "Tech stocks dropped 3%, Banks rallied" },
+             { text: "SEC approves Bitcoin ETF", event: "Regulatory Approval", outcome: "Bitcoin surged 5% intraday" },
+             { text: "Oil supply shock in middle east", event: "Geopolitical Conflict", outcome: "Energy sector up 6%, Airlines down 4%" }
+          ];
+          for (const item of events) {
+             const embedding = await env.AI.run('@cf/baai/bge-base-en-v1.5', { text: [item.text] });
+             await env.MARKET_MEMORY.upsert([{ id: crypto.randomUUID(), values: embedding.data[0], metadata: {event: item.event, outcome: item.outcome} }]);
+          }
+          return new Response("✅ QuantGraph Memory Seeded with 3 Events");
+       } catch(e: any) { return new Response("Error: " + e.message); }
+    }
+
     return env.ASSETS.fetch(request);
   }
 } satisfies ExportedHandler<Env>;
