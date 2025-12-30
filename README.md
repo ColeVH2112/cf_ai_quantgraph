@@ -61,9 +61,9 @@ npx wrangler deploy --config wrangler.jsonc
 
 ### Memory Seeding 
 To initialize the Vector Database with historical data: 
-#1. Deploy the worker 
-#2. visit https://cf-ai-quantgraph-v3.colevanhersett.workers.dev/seed
-#3. The system will generate embedings for defined market events and store tehm in the Vectorize index 
+* 1. Deploy the worker 
+* 2. visit https://cf-ai-quantgraph-v3.colevanhersett.workers.dev/seed
+* 3. The system will generate embedings for defined market events and store tehm in the Vectorize index 
 
 ### Project Structure 
 * **src/server.ts**: The backend logic, RAG pipeline, and AI inference (worker).
