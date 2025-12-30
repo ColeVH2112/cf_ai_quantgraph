@@ -63,7 +63,7 @@ npx wrangler deploy --config wrangler.jsonc
 To initialize the Vector Database with historical data: 
 * 1. Deploy the worker 
 * 2. visit https://cf-ai-quantgraph-v3.colevanhersett.workers.dev/seed
-* 3. The system will generate embedings for defined market events and store them in the Vectorize index
+* 3. The system will generate embeddings for defined market events and store them in the Vectorize index
 
 ### Project Structure 
 * **src/server.ts**: The backend logic, RAG pipeline, and AI inference (worker).
@@ -71,4 +71,4 @@ To initialize the Vector Database with historical data:
 * **wrangler.jsonc**: Cloudflare infrastructure configuration
 
 ### Future Direction 
-Currently the Durable objects are seeded with a pre-set and determined information. Working forward i would want to seed those with a web-scraping extension that tracks sentiment events and stores their impact in order to be actively applicable and functional in the real world
+Currently, the Vector Database is seeded with a pre-set list of historical events. Moving forward, the goal is to integrate a web-scraping pipeline (using Cloudflare Browser Rendering) to track real-time sentiment events and automatically update the memory index. This would allow QuantGraph to evolve and remain applicable to live market conditions.
