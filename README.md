@@ -9,34 +9,39 @@
 Unlike generic chatbots, QuantGraph uses a vector database to ground its answers in historical data, adopting a professional "Quantitative Analyst" persona.
 
 ## 🚀 Live Demo
+
 **https://cf-ai-quantgraph-v3.colevanhersett.workers.dev/**
 
 ## 🏗️ Architecture
+
 This project is a **Full-Stack TypeScript** application deployed entirely on serverless infrastructure.
 
-* **Frontend:** React + Vite (TypeScript)
-    * Custom Flexbox layout for responsive chat UI.
-    * Direct API integration (bypassing heavy SDKs for performance).
-* **Backend:** Cloudflare Workers (TypeScript)
-    * Handles API requests and AI orchestration.
-* **AI Inference:** Llama 3 (via Cloudflare Workers AI)
-    * Runs `@cf/meta/llama-3-8b-instruct` on the edge.
-* **Memory (RAG):** Cloudflare Vectorize
-    * Stores embeddings of historical market events to provide context to the AI.
+- **Frontend:** React + Vite (TypeScript)
+  - Custom Flexbox layout for responsive chat UI.
+  - Direct API integration (bypassing heavy SDKs for performance).
+- **Backend:** Cloudflare Workers (TypeScript)
+  - Handles API requests and AI orchestration.
+- **AI Inference:** Llama 3 (via Cloudflare Workers AI)
+  - Runs `@cf/meta/llama-3-8b-instruct` on the edge.
+- **Memory (RAG):** Cloudflare Vectorize
+  - Stores embeddings of historical market events to provide context to the AI.
 
 ## ✨ Key Features
-* **Causal Reasoning:** The AI looks up past events (e.g., "Rate Hikes") to predict future outcomes based on seeded data.
-* **Edge Latency:** Runs globally on Cloudflare's network, eliminating cold starts common in standard containers.
-* **"Safe Mode" Protocol:** Uses a custom-built, robust JSON protocol to ensure message delivery even in unstable network conditions.
-* **Responsive UI:** A clean, dark-mode interface designed to mimic professional trading terminals.
+
+- **Causal Reasoning:** The AI looks up past events (e.g., "Rate Hikes") to predict future outcomes based on seeded data.
+- **Edge Latency:** Runs globally on Cloudflare's network, eliminating cold starts common in standard containers.
+- **"Safe Mode" Protocol:** Uses a custom-built, robust JSON protocol to ensure message delivery even in unstable network conditions.
+- **Responsive UI:** A clean, dark-mode interface designed to mimic professional trading terminals.
 
 ## 🛠️ Getting Started
 
 ### Prerequisites
-* Node.js & npm
-* Cloudflare Wrangler CLI (`npm install -g wrangler`)
+
+- Node.js & npm
+- Cloudflare Wrangler CLI (`npm install -g wrangler`)
 
 ### Installation
+
 ```bash
 # 1. Clone the repository
 git clone https://github.com/ColeVH2112/cf_ai_quantgraph.git
@@ -45,13 +50,16 @@ git clone https://github.com/ColeVH2112/cf_ai_quantgraph.git
 npm install
 ```
 
-### Local Development 
+### Local Development
+
 ```bash
 npm run dev
 ```
 
-### Deployment 
+### Deployment
+
 This project uses a custom configuration to manage the full-stack build process
+
 ```bash
 #1. Build the React Frontend
 npx vite build
@@ -59,16 +67,20 @@ npx vite build
 npx wrangler deploy --config wrangler.jsonc
 ```
 
-### Memory Seeding 
-To initialize the Vector Database with historical data: 
-* 1. Deploy the worker 
-* 2. visit https://cf-ai-quantgraph-v3.colevanhersett.workers.dev/seed
-* 3. The system will generate embeddings for defined market events and store them in the Vectorize index
+### Memory Seeding
 
-### Project Structure 
-* **src/server.ts**: The backend logic, RAG pipeline, and AI inference (worker).
-* **src/app.tsx**: The React frontend, chat interface, and API handling.
-* **wrangler.jsonc**: Cloudflare infrastructure configuration
+To initialize the Vector Database with historical data:
 
-### Future Direction 
+- 1. Deploy the worker
+- 2. visit https://cf-ai-quantgraph-v3.colevanhersett.workers.dev/seed
+- 3. The system will generate embeddings for defined market events and store them in the Vectorize index
+
+### Project Structure
+
+- **src/server.ts**: The backend logic, RAG pipeline, and AI inference (worker).
+- **src/app.tsx**: The React frontend, chat interface, and API handling.
+- **wrangler.jsonc**: Cloudflare infrastructure configuration
+
+### Future Direction
+
 Currently, the Vector Database is seeded with a pre-set list of historical events. Moving forward, the goal is to integrate a web-scraping pipeline (using Cloudflare Browser Rendering) to track real-time sentiment events and automatically update the memory index. This would allow QuantGraph to evolve and remain applicable to live market conditions.
